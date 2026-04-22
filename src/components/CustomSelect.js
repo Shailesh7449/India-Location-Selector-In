@@ -16,6 +16,7 @@ const CustomSelect = ({
   className,
   onSearch, // Optional for remote searching
   emptyMessage, // Custom message when no results found
+  name,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,16 +25,21 @@ const CustomSelect = ({
   const inputRef = useRef(null);
 
   // Sync searchTerm with selected value name when not focused
-  const selectedOption = useMemo(() => options.find(opt => String(opt.id) === String(value)), [options, value]);
+  const selectedOption = useMemo(() => {
+    if (value === null || value === undefined || value === '') return null;
+    return options.find(opt => String(opt.id) === String(value));
+  }, [options, value]);
 
 
   useEffect(() => {
-    if (!isOpen && selectedOption) {
-      setSearchTerm(selectedOption.name);
-    } else if (!value) {
-      setSearchTerm('');
+    if (!isOpen) {
+      if (selectedOption) {
+        setSearchTerm(selectedOption.name);
+      } else if (!value) {
+        setSearchTerm('');
+      }
     }
-  }, [value, selectedOption, isOpen]);
+  }, [value, selectedOption, isOpen, options]);
 
   // Local filtering
   const filteredOptions = useMemo(() => {
@@ -74,6 +80,8 @@ const CustomSelect = ({
   };
 
   const handleSelect = (option) => {
+    if (!option) return;
+    console.log(`CustomSelect [${label}] Selected:`, option);
     onChange(option.id);
     setSearchTerm(option.name);
     setIsOpen(false);
@@ -116,6 +124,8 @@ const CustomSelect = ({
           onKeyDown={handleKeyDown}
           disabled={disabled}
           placeholder={placeholder || `Search ${label}...`}
+          autoComplete="off"
+          name={name || label.toLowerCase()}
           className={clsx(
             "w-full pl-11 pr-20 py-3.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-md border border-slate-200 dark:border-slate-700/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all text-sm font-medium",
             (disabled || loading) && "opacity-50 cursor-not-allowed bg-slate-100/50 dark:bg-slate-900/50"

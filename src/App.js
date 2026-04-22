@@ -26,13 +26,14 @@ function App() {
   const [districtsList, setDistrictsList] = useState([]);
   const [subdistrictsList, setSubdistrictsList] = useState([]);
   const [villagesList, setVillagesList] = useState([]);
+  const [totalVillages, setTotalVillages] = useState(0);
 
   // Current Selections (Internal)
   const [selections, setSelections] = useState({
-    state: null,
-    district: null,
-    subdistrict: null,
-    village: null
+    state_id: null,
+    district_id: null,
+    subdistrict_id: null,
+    village_id: null
   });
 
   // Final Applied Selection (for Rendering)
@@ -64,11 +65,23 @@ function App() {
       const data = await res.json();
       
       // Standardize data for CustomSelect (id/name)
-      const formatted = data.map(item => ({
-        id: item.village_id || item.subdistrict_id || item.district_id || item.state_id || item.id,
-        name: item.village || item.subdistrict || item.district || item.state || item.name,
-        ...item
-      }));
+      const formatted = data.map(item => {
+        let id, name;
+        if (loadingKey === 'states') {
+          id = item.state_id ?? item.id;
+          name = item.state ?? item.state_name ?? item.name;
+        } else if (loadingKey === 'districts') {
+          id = item.district_id ?? item.id;
+          name = item.district ?? item.district_name ?? item.name;
+        } else if (loadingKey === 'subdistricts') {
+          id = item.subdistrict_id ?? item.id;
+          name = item.subdistrict ?? item.subdistrict_name ?? item.name;
+        } else {
+          id = item.id;
+          name = item.name;
+        }
+        return { ...item, id, name };
+      });
 
       
       setter(formatted);
@@ -108,8 +121,8 @@ function App() {
   };
 
   const handleVillageSearch = useCallback(async (query) => {
-    const subId = selections.subdistrict?.subdistrict_id || selections.subdistrict?.id;
-    console.log("Searching with Subdistrict ID:", subId); // Debugging 🔍
+    const subId = selections.subdistrict_id;
+    console.log("Searching villages for subdistrict_id:", subId);
     
     if (!query || query.length < 2) {
       if (subId) {
@@ -128,17 +141,12 @@ function App() {
       
       const res = await fetch(url);
       const data = await res.json();
-      console.log("Village API Response:", data); // Debugging 🔍
       
-      const formattedData = data
-        .filter(v => v.village && v.village !== v.state)
-        .map(v => ({ 
-          id: v.village_id || v.id, 
-          name: v.village,
-          subdistrict: v.subdistrict,
-          district: v.district,
-          state: v.state
-        }));
+      const formattedData = data.map(v => ({ 
+        id: v.village_id ?? v.id, 
+        name: v.village ?? v.village_name ?? v.name,
+        ...v
+      }));
         
       setVillagesList(formattedData);
     } catch (err) {
@@ -146,7 +154,7 @@ function App() {
     } finally {
       setLoading(prev => ({ ...prev, villages: false }));
     }
-  }, [selections.subdistrict]);
+  }, [selections.subdistrict_id]);
 
   // Debounce handleVillageSearch
   const debouncedSearch = useRef(null);
@@ -159,64 +167,81 @@ function App() {
 
   // Handlers
   const handleStateChange = (id) => {
-    console.log("State Selected:", id);
+    console.log("State ID Selected:", id);
     if (!id) {
       resetAll();
       return;
     }
-    const numericId = Number(id);
-    const item = statesList.find(s => s.id === numericId);
-    setSelections({ state: item, district: null, subdistrict: null, village: null });
+    
+    setSelections({
+      state_id: Number(id),
+      district_id: null,
+      subdistrict_id: null,
+      village_id: null
+    });
+    
     setAppliedData(null);
     setMapLocation(null);
     setDistrictsList([]);
     setSubdistrictsList([]);
     setVillagesList([]);
+    setTotalVillages(0);
     fetchData(`districts/${id}`, setDistrictsList, "districts");
   };
 
   const handleDistrictChange = (id) => {
-    console.log("District Selected:", id);
+    console.log("District ID Selected:", id);
     if (!id) {
-      setSelections(prev => ({ ...prev, district: null, subdistrict: null, village: null }));
+      setSelections(prev => ({ ...prev, district_id: null, subdistrict_id: null, village_id: null }));
       setSubdistrictsList([]);
       setVillagesList([]);
+      setTotalVillages(0);
       return;
     }
-    const numericId = Number(id);
-    const item = districtsList.find(d => d.id === numericId);
-    setSelections(prev => ({ ...prev, district: item, subdistrict: null, village: null }));
+    
+    setSelections(prev => ({ 
+      ...prev, 
+      district_id: Number(id), 
+      subdistrict_id: null, 
+      village_id: null 
+    }));
+    
     setAppliedData(null);
     setSubdistrictsList([]);
     setVillagesList([]);
+    setTotalVillages(0);
     fetchData(`subdistricts/${id}`, setSubdistrictsList, "subdistricts");
   };
 
   const handleSubdistrictChange = (id) => {
-    console.log("Subdistrict Selected:", id);
+    console.log("Subdistrict ID Selected:", id);
     if (!id) {
-      setSelections(prev => ({ ...prev, subdistrict: null, village: null }));
+      setSelections(prev => ({ ...prev, subdistrict_id: null, village_id: null }));
       setVillagesList([]);
+      setTotalVillages(0);
       return;
     }
-    const numericId = Number(id);
-    const item = subdistrictsList.find(sd => sd.id === numericId);
-    setSelections(prev => ({ ...prev, subdistrict: item, village: null }));
-    setAppliedData(null); // Reset applied state
+    
+    setSelections(prev => ({ 
+      ...prev, 
+      subdistrict_id: Number(id), 
+      village_id: null 
+    }));
+    
+    setAppliedData(null);
     setVillagesList([]);
     
-    // Fetch and format villages for this subdistrict
     setLoading(prev => ({ ...prev, villages: true }));
     fetch(`${API_BASE}/villages/${id}`)
       .then(res => res.json())
       .then(data => {
         const formatted = data.map(v => ({
-          id: v.village_id || v.id,
-          name: v.village,
+          id: v.village_id ?? v.id,
+          name: v.village ?? v.village_name ?? v.name,
           ...v
         }));
-        console.log("Villages response for subdistrict:", formatted); // Debugging 🔍
         setVillagesList(formatted);
+        setTotalVillages(formatted.length);
         setLoading(prev => ({ ...prev, villages: false }));
       })
       .catch(err => {
@@ -226,36 +251,48 @@ function App() {
   };
 
   const handleVillageChange = (id) => {
-    console.log("Selected Village ID:", id); // Debugging 🔍
+    console.log("Village ID Selected:", id);
     if (!id) {
-      setSelections(prev => ({ ...prev, village: null }));
+      setSelections(prev => ({ ...prev, village_id: null }));
       return;
     }
-    const numericId = Number(id);
-    const item = villagesList.find(v => v.id === numericId);
-    setSelections(prev => ({ ...prev, village: item }));
+    setSelections(prev => ({ ...prev, village_id: Number(id) }));
   };
 
   const handleApply = () => {
-    if (!selections.state || !selections.district || !selections.subdistrict) return;
+    if (!selections.state_id || !selections.district_id || !selections.subdistrict_id) return;
     
-    // Update Applied Data (removes Pending Selection UI)
-    setAppliedData({ ...selections });
+    // Resolve full objects for applied data
+    const appliedState = statesList.find(s => s.id === selections.state_id);
+    const appliedDistrict = districtsList.find(d => d.id === selections.district_id);
+    const appliedSubdistrict = subdistrictsList.find(sd => sd.id === selections.subdistrict_id);
+    const appliedVillage = villagesList.find(v => v.id === selections.village_id);
+
+    setAppliedData({ 
+      state: appliedState, 
+      district: appliedDistrict, 
+      subdistrict: appliedSubdistrict, 
+      village: appliedVillage 
+    });
   };
 
   const handleLocate = async () => {
-    if (!selections.subdistrict) return;
+    const sdObj = subdistrictsList.find(sd => sd.id === selections.subdistrict_id);
+    if (!sdObj) return;
 
     setLoading(prev => ({ ...prev, geocoding: true }));
     setError(null);
 
-    const isVillage = !!selections.village;
-    const vName = selections.village?.name || selections.village?.village || "";
-    const sdName = selections.subdistrict?.subdistrict || selections.village?.subdistrict;
-    const dName = selections.district?.district || selections.village?.district;
-    const sName = selections.state?.state || selections.village?.state;
+    const vObj = villagesList.find(v => v.id === selections.village_id);
+    const dObj = districtsList.find(d => d.id === selections.district_id);
+    const sObj = statesList.find(s => s.id === selections.state_id);
 
-    // Use village if available, otherwise subdistrict
+    const isVillage = !!vObj;
+    const vName = vObj?.village ?? vObj?.name ?? "";
+    const sdName = sdObj?.subdistrict ?? sdObj?.subdistrict_name ?? "";
+    const dName = dObj?.district ?? dObj?.district_name ?? "";
+    const sName = sObj?.state ?? sObj?.state_name ?? "";
+
     const query = isVillage 
       ? `${vName}, ${sdName}, ${dName}, ${sName}, India`
       : `${sdName}, ${dName}, ${sName}, India`;
@@ -278,17 +315,20 @@ function App() {
 
 
   const resetAll = () => {
-    setSelections({ state: null, district: null, subdistrict: null, village: null });
+    setSelections({ state_id: null, district_id: null, subdistrict_id: null, village_id: null });
     setAppliedData(null);
     setMapLocation(null);
     setMapZoom(5);
     setDistrictsList([]);
     setSubdistrictsList([]);
     setVillagesList([]);
+    setTotalVillages(0);
     setError(null);
   };
 
-  const isApplyDisabled = !selections.state || !selections.district || !selections.subdistrict;
+  const isApplyDisabled = !selections.state_id || !selections.district_id || !selections.subdistrict_id;
+
+  console.log("Selection State IDs:", selections);
 
   return (
     <div className="flex flex-col items-center justify-center p-4 md:p-8 min-h-screen space-y-8 bg-slate-50 dark:bg-slate-950 transition-colors">
@@ -319,11 +359,17 @@ function App() {
             
             <div className="flex items-center gap-2 px-5 py-3 bg-slate-100/50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-x-auto whitespace-nowrap scrollbar-hide">
               <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Path:</span>
-              <span className={selections.state ? "text-blue-600 dark:text-blue-400 font-bold" : "text-slate-400"}>{selections.state?.state || "State"}</span>
+              <span className={selections.state_id ? "text-blue-600 dark:text-blue-400 font-bold" : "text-slate-400"}>
+                {statesList.find(s => s.id === selections.state_id)?.name || "State"}
+              </span>
               <span className="text-slate-300">/</span>
-              <span className={selections.district ? "text-blue-600 dark:text-blue-400 font-bold" : "text-slate-400"}>{selections.district?.district || "District"}</span>
+              <span className={selections.district_id ? "text-blue-600 dark:text-blue-400 font-bold" : "text-slate-400"}>
+                {districtsList.find(d => d.id === selections.district_id)?.name || "District"}
+              </span>
               <span className="text-slate-300">/</span>
-              <span className={selections.village ? "text-blue-600 dark:text-blue-400 font-bold" : "text-slate-400"}>{selections.village?.name || selections.village?.village || (selections.subdistrict ? "No Village Selected" : "Village")}</span>
+              <span className={selections.village_id ? "text-blue-600 dark:text-blue-400 font-bold" : "text-slate-400"}>
+                {villagesList.find(v => v.id === selections.village_id)?.name || (selections.subdistrict_id ? "No Village" : "Village")}
+              </span>
             </div>
           </div>
 
@@ -335,7 +381,7 @@ function App() {
                   label="State" 
                   icon={Map} 
                   options={statesList} 
-                  value={selections.state?.id || ""} 
+                  value={selections.state_id} 
                   onChange={handleStateChange} 
                   loading={loading.states} 
                 />
@@ -344,32 +390,32 @@ function App() {
                   label="District" 
                   icon={Navigation} 
                   options={districtsList} 
-                  value={selections.district?.id || ""} 
+                  value={selections.district_id} 
                   onChange={handleDistrictChange} 
                   loading={loading.districts} 
-                  disabled={!selections.state} 
+                  disabled={!selections.state_id} 
                 />
                 
                 <CustomSelect 
                   label="Subdistrict" 
                   icon={MapPin} 
                   options={subdistrictsList} 
-                  value={selections.subdistrict?.id || ""} 
+                  value={selections.subdistrict_id} 
                   onChange={handleSubdistrictChange} 
                   loading={loading.subdistricts} 
-                  disabled={!selections.district} 
+                  disabled={!selections.district_id} 
                 />
                 
                 <CustomSelect 
                   label="Village" 
                   icon={Home} 
                   options={villagesList} 
-                  value={selections.village?.id || selections.village?.village_id || ""} 
+                  value={selections.village_id} 
                   onChange={handleVillageChange} 
                   onSearch={onVillageSearch}
                   loading={loading.villages} 
-                  disabled={!selections.subdistrict} 
-                  placeholder={!selections.subdistrict ? "Select subdistrict first" : "Type to search village..."}
+                  disabled={!selections.subdistrict_id} 
+                  placeholder={!selections.subdistrict_id ? "Select subdistrict first" : "Type to search village..."}
                   emptyMessage="No villages available — you can still apply selection"
                 />
               </div>
@@ -467,10 +513,10 @@ function App() {
               {/* Dynamic Insights Grid */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                  { label: "State", value: selections.state?.state || "N/A", icon: Globe, color: "text-blue-500" },
+                  { label: "State", value: statesList.find(s => s.id === selections.state_id)?.name || "N/A", icon: Globe, color: "text-blue-500" },
                   { label: "Districts", value: districtsList.length || 0, icon: Layers, color: "text-indigo-500" },
                   { label: "Subdistricts", value: subdistrictsList.length || 0, icon: LayoutGrid, color: "text-purple-500" },
-                  { label: "Villages", value: villagesList.length || 0, icon: MapPin, color: "text-pink-500" }
+                  { label: "Villages", value: totalVillages || 0, icon: MapPin, color: "text-pink-500" }
                 ].map((stat, i) => (
                   <div key={i} className="p-4 bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-white/20 shadow-sm">
                     <div className={`${stat.color} mb-1`}><stat.icon size={18} /></div>
@@ -499,9 +545,9 @@ function App() {
                   <div>
                     <div className="text-xs font-black uppercase tracking-[0.2em] opacity-60 mb-2">Verified Selection Path</div>
                     <div className="text-xl md:text-2xl font-bold leading-tight">
-                      {appliedData.village ? `${appliedData.village.village}, ` : ""} 
-                      {appliedData.subdistrict.subdistrict}, <br className="hidden md:block" />
-                      {appliedData.district.district}, {appliedData.state.state}, India
+                      {appliedData.village?.village ? `${appliedData.village.village}, ` : ""} 
+                      {appliedData.subdistrict?.subdistrict_name || appliedData.subdistrict?.subdistrict || appliedData.subdistrict?.name}, <br className="hidden md:block" />
+                      {appliedData.district?.district_name || appliedData.district?.district || appliedData.district?.name}, {appliedData.state?.state_name || appliedData.state?.state || appliedData.state?.name}, India
                     </div>
                     {!appliedData.village && (
                       <div className="text-[10px] text-blue-200 mt-2 font-medium bg-blue-500/20 w-fit px-2 py-0.5 rounded-full border border-blue-400/30">
